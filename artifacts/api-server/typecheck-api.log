@@ -1,0 +1,16 @@
+src/routes/auth.ts(12,28): error TS7030: Not all code paths return a value.
+src/routes/auth.ts(71,31): error TS7030: Not all code paths return a value.
+src/routes/categories.ts(18,18): error TS7030: Not all code paths return a value.
+src/routes/categories.ts(50,20): error TS7030: Not all code paths return a value.
+src/routes/categories.ts(81,23): error TS7030: Not all code paths return a value.
+src/routes/orders.ts(65,18): error TS7030: Not all code paths return a value.
+src/routes/products.ts(32,18): error TS7030: Not all code paths return a value.
+src/routes/products.ts(63,20): error TS7030: Not all code paths return a value.
+src/routes/products.ts(109,23): error TS7030: Not all code paths return a value.
+src/routes/products.ts(130,27): error TS7030: Not all code paths return a value.
+src/routes/settings.ts(43,37): error TS7030: Not all code paths return a value.
+src/routes/settings.ts(78,3): error TS7030: Not all code paths return a value.
+src/routes/users.ts(30,20): error TS7030: Not all code paths return a value.
+src/routes/users.ts(48,18): error TS7030: Not all code paths return a value.
+src/routes/users.ts(110,20): error TS7030: Not all code paths return a value.
+src/routes/users.ts(182,23): error TS7030: Not all code paths return a value.

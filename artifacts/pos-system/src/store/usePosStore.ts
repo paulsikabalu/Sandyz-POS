@@ -211,7 +211,7 @@ export function usePosStore() {
     });
   };
 
-const completeOrder = async (tableId: string, paymentMethod: string): Promise<ApiOrder | null> => {
+  const completeOrder = async (tableId: string, paymentMethod: string): Promise<ApiOrder | null> => {
     const cart = getCart(tableId);
     if (cart.length === 0) return null;
 
