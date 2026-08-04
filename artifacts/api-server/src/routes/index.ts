@@ -7,6 +7,7 @@ import usersRouter from "./users.js";
 import reportsRouter from "./reports.js";
 import settingsRouter from "./settings.js";
 import categoriesRouter from "./categories.js";
+import cashDrawerRouter from "./cash-drawer.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use('/users', usersRouter);
 router.use('/reports', reportsRouter);
 router.use('/settings', settingsRouter);
 router.use('/categories', categoriesRouter);
+router.use('/cash-drawer', cashDrawerRouter);
 
 export default router;

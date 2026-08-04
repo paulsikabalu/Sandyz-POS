@@ -4,8 +4,9 @@ import { Topbar } from '../components/Topbar';
 import { CenterPanel } from '../components/CenterPanel';
 import { OrderPanel } from '../components/OrderPanel';
 import { ThermalReceipt } from '../components/ThermalReceipt';
+import { SyncFailurePanel } from '../components/SyncFailurePanel';
 import { useToast } from '@/hooks/use-toast';
-import { Wifi, WifiOff, RefreshCw, CloudOff } from 'lucide-react';
+import { WifiOff, RefreshCw, CloudOff } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { ApiOrder } from '../api/client';
+import { getCashDrawerSettings, openCashDrawer } from '../lib/cashDrawer';
+import { useSyncStatus } from '../lib/sync';
 
 export default function Pos() {
   const {
@@ -31,9 +34,17 @@ export default function Pos() {
     subtotal,
     tax,
     total,
-    syncStatus,
     isOnline,
   } = usePosStore();
+
+  const {
+    status: syncStatus,
+    failedMutations,
+    retryMutation,
+    discardMutation,
+    retryAll,
+    discardAll,
+  } = useSyncStatus();
 
   const [isPlacing, setIsPlacing] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState<ApiOrder | null>(null);
@@ -48,9 +59,7 @@ export default function Pos() {
     return item ? item.quantity : 0;
   };
 
-  const handleAdd = (product: any) => {
-    addToCart(activeTableId, product);
-  };
+  const handleAdd = (product: any) => addToCart(activeTableId, product);
 
   const handleUpdateQuantity = (productId: string, delta: number) => {
     updateQuantity(activeTableId, productId, delta);
@@ -83,25 +92,30 @@ export default function Pos() {
     }
   };
 
-  // Show sync status toast
+  /** Open cash drawer before printing receipt (cash payments only). */
+  const handleBeforePrint = async () => {
+    if (!receiptOrder || receiptOrder.paymentMethod !== 'cash') return;
+    const drawerSettings = getCashDrawerSettings();
+    if (!drawerSettings.enabled) return;
+    await openCashDrawer(drawerSettings);
+  };
+
+  // Show a brief toast when background sync starts
   useEffect(() => {
     if (syncStatus === 'syncing' && !showSyncToast) {
       setShowSyncToast(true);
-      toast({
-        title: '🔄 Syncing…',
-        description: 'Background sync in progress',
-        duration: 2000,
-      });
+      toast({ title: '🔄 Syncing…', description: 'Background sync in progress', duration: 2000 });
     }
     if (syncStatus === 'idle' && showSyncToast) {
       setShowSyncToast(false);
     }
   }, [syncStatus, showSyncToast, toast]);
 
+  const drawerSettings = receiptOrder ? getCashDrawerSettings() : null;
+  const isCashPayment = receiptOrder?.paymentMethod === 'cash';
+
   return (
     <div className="h-[100dvh] w-full bg-background flex flex-col overflow-hidden text-foreground selection:bg-primary/30">
-      
-
       <Topbar />
 
       <div className="flex-1 flex overflow-hidden">
@@ -116,7 +130,6 @@ export default function Pos() {
           productsLoading={productsLoading}
           onRefresh={loadProducts}
         />
-
         <OrderPanel
           table={activeTable}
           cart={activeCart}
@@ -129,27 +142,37 @@ export default function Pos() {
           isPlacing={isPlacing}
         />
       </div>
-      {/* Sync Status Banner */}
+
+      {/* ── Sync status banners ── */}
       {!isOnline && (
-        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 bg-amber-50 border-b border-amber-200 text-amber-700 text-xs font-medium">
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 bg-amber-50 border-t border-amber-200 text-amber-700 text-xs font-medium">
           <WifiOff size={13} />
           <span>You are offline — data will sync when connection is restored</span>
         </div>
       )}
       {syncStatus === 'syncing' && isOnline && (
-        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 bg-blue-50 border-b border-blue-200 text-blue-700 text-xs font-medium">
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 bg-blue-50 border-t border-blue-200 text-blue-700 text-xs font-medium">
           <RefreshCw size={13} className="animate-spin" />
           <span>Syncing data in background…</span>
         </div>
       )}
-      {syncStatus === 'error' && isOnline && (
-        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 bg-red-50 border-b border-red-200 text-red-700 text-xs font-medium">
+      {syncStatus === 'error' && isOnline && failedMutations.length === 0 && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 bg-red-50 border-t border-red-200 text-red-700 text-xs font-medium">
           <CloudOff size={13} />
           <span>Sync failed — will retry automatically</span>
         </div>
       )}
 
-      {/* Receipt dialog — opens automatically after order is placed */}
+      {/* ── Failed mutations panel ── */}
+      <SyncFailurePanel
+        mutations={failedMutations}
+        onRetry={retryMutation}
+        onDiscard={discardMutation}
+        onRetryAll={retryAll}
+        onDiscardAll={discardAll}
+      />
+
+      {/* ── Receipt dialog ── */}
       <Dialog open={!!receiptOrder} onOpenChange={open => { if (!open) setReceiptOrder(null); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -158,7 +181,18 @@ export default function Pos() {
           <div className="flex justify-center overflow-y-auto max-h-[80vh] py-2">
             {receiptOrder && (
               <ThermalReceipt
+                key={receiptOrder.id}
                 order={receiptOrder}
+                autoPrint
+                onBeforePrint={
+                  isCashPayment && drawerSettings?.enabled && drawerSettings.interface === 'network'
+                    ? handleBeforePrint
+                    : undefined
+                }
+                embedDrawerCmd={
+                  isCashPayment && !!drawerSettings?.enabled && drawerSettings.interface === 'print'
+                }
+                drawerPin={drawerSettings?.pin ?? 0}
                 onClose={() => setReceiptOrder(null)}
               />
             )}

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
 import type { ApiOrder } from '../api/client';
 
@@ -7,6 +7,20 @@ interface ThermalReceiptProps {
   storeName?: string;
   storeAddress?: string;
   storePhone?: string;
+  /** When true, triggers window.print() automatically after mount. */
+  autoPrint?: boolean;
+  /**
+   * Called before printing — use this to open the cash drawer first.
+   * If it rejects, the error is shown but printing still proceeds.
+   */
+  onBeforePrint?: () => Promise<void>;
+  /**
+   * When true, embed ESC/POS cash-drawer kick bytes in the print job
+   * (for printers with a drawer connected via the RJ-11 port).
+   */
+  embedDrawerCmd?: boolean;
+  /** Drawer pin for embedded ESC/POS mode (0 = pin 2, 1 = pin 5). */
+  drawerPin?: 0 | 1;
   onClose?: () => void;
 }
 
@@ -15,31 +29,71 @@ export function ThermalReceipt({
   storeName = 'SANDYZ Restaurant',
   storeAddress = 'Lusaka, Zambia',
   storePhone = '',
+  autoPrint = false,
+  onBeforePrint,
+  embedDrawerCmd = false,
+  drawerPin = 0,
   onClose,
 }: ThermalReceiptProps) {
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [printing, setPrinting] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const autoPrintFired = useRef(false);
 
-  const handlePrint = () => {
-    // Clone the receipt node into a hidden print container
+  const handlePrint = async () => {
     if (!receiptRef.current) return;
+    setPrinting(true);
+    setDrawerError(null);
 
-    // Remove any existing print container
+    // ── 1. Open cash drawer (if configured) ─────────────────────────────
+    if (onBeforePrint) {
+      try {
+        await onBeforePrint();
+      } catch (err: any) {
+        // Surface the error but don't block printing
+        setDrawerError(err?.message ?? 'Could not open cash drawer');
+      }
+    }
+
+    // ── 2. Build print container ─────────────────────────────────────────
     const existing = document.getElementById('thermal-print-root');
     if (existing) existing.remove();
 
     const printRoot = document.createElement('div');
     printRoot.id = 'thermal-print-root';
+
+    // If the printer has the drawer connected via RJ-11, embed the ESC/POS
+    // kick command as the very first bytes so the drawer opens before the
+    // paper feed starts.
+    if (embedDrawerCmd) {
+      const cmdSpan = document.createElement('span');
+      cmdSpan.className = 'drawer-cmd';
+      // ESC p m t1 t2
+      cmdSpan.textContent = `\x1b\x70${String.fromCharCode(drawerPin)}\x19\xfa`;
+      printRoot.appendChild(cmdSpan);
+    }
+
     printRoot.appendChild(receiptRef.current.cloneNode(true));
     document.body.appendChild(printRoot);
 
     window.print();
 
-    // Clean up after print dialog closes
     setTimeout(() => {
       const el = document.getElementById('thermal-print-root');
       if (el) el.remove();
+      setPrinting(false);
     }, 1000);
   };
+
+  // Auto-print once after mount
+  useEffect(() => {
+    if (!autoPrint || autoPrintFired.current) return;
+    autoPrintFired.current = true;
+    // Small delay so the dialog finishes rendering
+    const id = setTimeout(() => handlePrint(), 300);
+    return () => clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPrint]);
 
   const date = new Date(order.timestamp);
   const dateStr = date.toLocaleDateString('en-GB', {
@@ -61,7 +115,14 @@ export function ThermalReceipt({
   const isOffline = order.id.startsWith('offline_');
 
   return (
-    <div className="flex flex-col items-center gap-4 ">
+    <div className="flex flex-col items-center gap-4">
+      {/* Cash drawer error (non-blocking) */}
+      {drawerError && (
+        <div className="w-full text-center text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          ⚠ Cash drawer: {drawerError}
+        </div>
+      )}
+
       {/* On-screen preview */}
       <div
         ref={receiptRef}
@@ -178,10 +239,11 @@ export function ThermalReceipt({
         )}
         <button
           onClick={handlePrint}
-          className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+          disabled={printing}
+          className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
         >
           <Printer size={15} />
-          Print Receipt
+          {printing ? 'Printing…' : 'Print Receipt'}
         </button>
       </div>
     </div>

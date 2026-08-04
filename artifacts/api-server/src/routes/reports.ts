@@ -1,6 +1,8 @@
 import { Router } from "express";
-import { db } from "../data/store";
+import { db } from "@workspace/db";
+import { orders, orderItems, products } from "@workspace/db/schema";
 import { authenticate, authorize } from "../middlewares/auth";
+import { gte, lte, and, desc, eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -10,64 +12,81 @@ router.use(authenticate);
 /**
  * GET /api/reports/sales
  * Returns sales report data with optional date range.
- * Query params: startDate (timestamp), endDate (timestamp)
+ * Query params: startDate (epoch ms), endDate (epoch ms)
  */
-router.get("/sales", authorize("admin", "manager"), (_req, res) => {
+router.get("/sales", authorize("admin", "manager"), async (req, res) => {
   try {
-    const orders = db.getOrders();
-    const startDate = _req.query.startDate
-      ? Number(_req.query.startDate)
-      : 0;
-    const endDate = _req.query.endDate
-      ? Number(_req.query.endDate)
-      : Date.now();
+    const startDate = req.query.startDate
+      ? new Date(Number(req.query.startDate))
+      : new Date(0);
+    const endDate = req.query.endDate
+      ? new Date(Number(req.query.endDate))
+      : new Date();
 
-    const filteredOrders = orders.filter(
-      (o) => o.timestamp >= startDate && o.timestamp <= endDate
-    );
+    // Single JOIN query: orders + their items, filtered by date range
+    const rows = await db
+      .select({ order: orders, item: orderItems })
+      .from(orders)
+      .leftJoin(orderItems, eq(orderItems.orderId, orders.id))
+      .where(and(gte(orders.createdAt, startDate), lte(orders.createdAt, endDate)))
+      .orderBy(desc(orders.createdAt));
 
-// Summary
-    const totalOrders = filteredOrders.length;
-    const totalRevenue = filteredOrders.reduce(
-      (sum, o) => sum + Number(o.total),
+    // Group rows into order → items map
+    const orderMap = new Map<
+      string,
+      { order: typeof orders.$inferSelect; items: typeof orderItems.$inferSelect[] }
+    >();
+    for (const row of rows) {
+      if (!orderMap.has(row.order.id)) {
+        orderMap.set(row.order.id, { order: row.order, items: [] });
+      }
+      if (row.item) {
+        orderMap.get(row.order.id)!.items.push(row.item);
+      }
+    }
+
+    const orderList = Array.from(orderMap.values());
+
+    // ── Summary ───────────────────────────────────────────────────────────
+    const totalOrders = orderList.length;
+    const totalRevenue = orderList.reduce(
+      (sum, { order }) => sum + Number(order.total),
       0
     );
-    const totalItems = filteredOrders.reduce(
-      (sum, o) => sum + o.items.reduce((s, i) => s + i.qty, 0),
+    const totalItems = orderList.reduce(
+      (sum, { items }) => sum + items.reduce((s, i) => s + i.qty, 0),
       0
     );
 
-    // Payment method breakdown
+    // ── Payment breakdown ──────────────────────────────────────────────────
     const paymentBreakdown: Record<string, number> = {};
-    for (const order of filteredOrders) {
+    for (const { order } of orderList) {
       paymentBreakdown[order.paymentMethod] =
         (paymentBreakdown[order.paymentMethod] ?? 0) + Number(order.total);
     }
 
-    // Daily breakdown
+    // ── Daily breakdown ────────────────────────────────────────────────────
     const dailyMap: Record<string, { orders: number; revenue: number }> = {};
-    for (const order of filteredOrders) {
-      const dateKey = new Date(order.timestamp).toISOString().split("T")[0];
-      if (!dailyMap[dateKey]) {
-        dailyMap[dateKey] = { orders: 0, revenue: 0 };
-      }
+    for (const { order } of orderList) {
+      const dateKey = new Date(order.createdAt).toISOString().split("T")[0];
+      if (!dailyMap[dateKey]) dailyMap[dateKey] = { orders: 0, revenue: 0 };
       dailyMap[dateKey].orders += 1;
       dailyMap[dateKey].revenue += Number(order.total);
     }
 
-    // Top products
-    const productSales: Record<string, { name: string; qty: number; revenue: number }> = {};
-    for (const order of filteredOrders) {
-      for (const item of order.items) {
+    // ── Top products ───────────────────────────────────────────────────────
+    const productSales: Record<
+      string,
+      { name: string; qty: number; revenue: number }
+    > = {};
+    for (const { items } of orderList) {
+      for (const item of items) {
         if (!productSales[item.productId]) {
-          productSales[item.productId] = {
-            name: item.name,
-            qty: 0,
-            revenue: 0,
-          };
+          productSales[item.productId] = { name: item.name, qty: 0, revenue: 0 };
         }
         productSales[item.productId].qty += item.qty;
-        productSales[item.productId].revenue += Number(item.price) * item.qty;
+        productSales[item.productId].revenue +=
+          Number(item.price) * item.qty;
       }
     }
 
@@ -81,9 +100,10 @@ router.get("/sales", authorize("admin", "manager"), (_req, res) => {
         totalOrders,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         totalItems,
-        averageOrderValue: totalOrders > 0
-          ? Math.round((totalRevenue / totalOrders) * 100) / 100
-          : 0,
+        averageOrderValue:
+          totalOrders > 0
+            ? Math.round((totalRevenue / totalOrders) * 100) / 100
+            : 0,
       },
       paymentBreakdown,
       dailySales: Object.entries(dailyMap)
@@ -99,23 +119,25 @@ router.get("/sales", authorize("admin", "manager"), (_req, res) => {
 
 /**
  * GET /api/reports/stock
- * Returns stock report data.
+ * Returns stock report data from the products table.
  */
-router.get("/stock", authorize("admin", "manager"), (_req, res) => {
+router.get("/stock", authorize("admin", "manager"), async (_req, res) => {
   try {
-    const products = db.getProducts();
+    const productList = await db.select().from(products);
 
-    const totalProducts = products.length;
-    const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
-    const outOfStock = products.filter((p) => p.stock === 0).length;
-    const lowStock = products.filter((p) => p.stock > 0 && p.stock <= 5).length;
+    const totalProducts = productList.length;
+    const totalStock = productList.reduce((sum, p) => sum + p.stock, 0);
+    const outOfStock = productList.filter((p) => p.stock === 0).length;
+    const lowStock = productList.filter(
+      (p) => p.stock > 0 && p.stock <= 5
+    ).length;
 
     // By section
     const sectionBreakdown: Record<
       string,
       { count: number; totalStock: number; outOfStock: number; lowStock: number }
     > = {};
-    for (const product of products) {
+    for (const product of productList) {
       if (!sectionBreakdown[product.section]) {
         sectionBreakdown[product.section] = {
           count: 0,
@@ -126,7 +148,8 @@ router.get("/stock", authorize("admin", "manager"), (_req, res) => {
       }
       sectionBreakdown[product.section].count += 1;
       sectionBreakdown[product.section].totalStock += product.stock;
-      if (product.stock === 0) sectionBreakdown[product.section].outOfStock += 1;
+      if (product.stock === 0)
+        sectionBreakdown[product.section].outOfStock += 1;
       if (product.stock > 0 && product.stock <= 5)
         sectionBreakdown[product.section].lowStock += 1;
     }
@@ -145,12 +168,14 @@ router.get("/stock", authorize("admin", "manager"), (_req, res) => {
             : 0,
       },
       sectionBreakdown,
-      lowStockItems: products
+      lowStockItems: productList
         .filter((p) => p.stock > 0 && p.stock <= 5)
-        .sort((a, b) => a.stock - b.stock),
-      outOfStockItems: products
+        .sort((a, b) => a.stock - b.stock)
+        .map((p) => ({ ...p, price: Number(p.price) })),
+      outOfStockItems: productList
         .filter((p) => p.stock === 0)
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((p) => ({ ...p, price: Number(p.price) })),
     });
   } catch (error) {
     console.error("GET /reports/stock failed:", error);
@@ -160,45 +185,83 @@ router.get("/stock", authorize("admin", "manager"), (_req, res) => {
 
 /**
  * GET /api/reports/orders
- * Returns order history with pagination.
- * Query params: page, limit, status, startDate, endDate
+ * Returns paginated order history from the database.
+ * Query params: page, limit, startDate, endDate
  */
-router.get("/orders", authorize("admin", "manager", "cashier"), (req, res) => {
-  try {
-    const orders = db.getOrders();
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-    const startDate = req.query.startDate ? Number(req.query.startDate) : 0;
-    const endDate = req.query.endDate ? Number(req.query.endDate) : Date.now();
+router.get(
+  "/orders",
+  authorize("admin", "manager", "cashier"),
+  async (req, res) => {
+    try {
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+      const startDate = req.query.startDate
+        ? new Date(Number(req.query.startDate))
+        : new Date(0);
+      const endDate = req.query.endDate
+        ? new Date(Number(req.query.endDate))
+        : new Date();
 
-    let filtered = orders.filter(
-      (o) => o.timestamp >= startDate && o.timestamp <= endDate
-    );
+      // Fetch orders in date range (newest first) with items via JOIN
+      const rows = await db
+        .select({ order: orders, item: orderItems })
+        .from(orders)
+        .leftJoin(orderItems, eq(orderItems.orderId, orders.id))
+        .where(
+          and(gte(orders.createdAt, startDate), lte(orders.createdAt, endDate))
+        )
+        .orderBy(desc(orders.createdAt));
 
-    // Sort by newest first
-    filtered.sort((a, b) => b.timestamp - a.timestamp);
+      // Group into order objects
+      const orderMap = new Map<
+        string,
+        { order: typeof orders.$inferSelect; items: typeof orderItems.$inferSelect[] }
+      >();
+      for (const row of rows) {
+        if (!orderMap.has(row.order.id)) {
+          orderMap.set(row.order.id, { order: row.order, items: [] });
+        }
+        if (row.item) orderMap.get(row.order.id)!.items.push(row.item);
+      }
 
-    const total = filtered.length;
-    const totalPages = Math.ceil(total / limit);
-    const start = (page - 1) * limit;
-    const paginated = filtered.slice(start, start + limit);
+      const allOrders = Array.from(orderMap.values());
+      const total = allOrders.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const start = (page - 1) * limit;
+      const paginated = allOrders.slice(start, start + limit);
 
-    res.json({
-      orders: paginated,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
-      },
-    });
-  } catch (error) {
-    console.error("GET /reports/orders failed:", error);
-    res.status(500).json({ error: "Failed to load orders" });
+      res.json({
+        orders: paginated.map(({ order, items }) => ({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          timestamp: new Date(order.createdAt).getTime(),
+          items: items.map((i) => ({
+            productId: i.productId,
+            name: i.name,
+            qty: i.qty,
+            price: Number(i.price),
+          })),
+          subtotal: Number(order.subtotal),
+          tax: Number(order.tax),
+          total: Number(order.total),
+          paymentMethod: order.paymentMethod,
+          tableId: order.tableId,
+          serviceType: order.serviceType,
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      });
+    } catch (error) {
+      console.error("GET /reports/orders failed:", error);
+      res.status(500).json({ error: "Failed to load orders" });
+    }
   }
-});
+);
 
 export default router;
-

@@ -12,7 +12,7 @@ import {
   cacheCategories,
 } from '../lib/db';
 
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = '/api';
 
 /**
  * Get JWT token from localStorage for authenticated requests.

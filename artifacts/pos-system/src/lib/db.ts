@@ -13,7 +13,11 @@ export type PendingMutation = {
   type: 'CREATE_PRODUCT' | 'UPDATE_PRODUCT' | 'DELETE_PRODUCT' | 'ADD_STOCK' | 'PLACE_ORDER' | 'UPDATE_ORDER' | 'DELETE_ORDER';
   payload: unknown;
   createdAt: number;
-  retries?: number;
+  retries: number;
+  /** Set when the mutation has permanently failed (retries exhausted or non-retryable error). */
+  failedAt?: number;
+  /** Human-readable message from the last failure. */
+  errorMessage?: string;
 };
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -237,17 +241,31 @@ export async function getPendingMutations(): Promise<PendingMutation[]> {
   return getAll<PendingMutation>('pendingMutations');
 }
 
-export async function queueMutation(mutation: Omit<PendingMutation, 'id' | 'createdAt'>): Promise<void> {
+export async function queueMutation(mutation: Omit<PendingMutation, 'id' | 'createdAt' | 'retries'>): Promise<void> {
   const item: PendingMutation = {
     ...mutation,
     id: `mut_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     createdAt: Date.now(),
+    retries: 0,
   };
   await putItem('pendingMutations', item);
 }
 
 export async function removeMutation(id: string): Promise<void> {
   await deleteItem('pendingMutations', id);
+}
+
+export async function updateMutation(id: string, updates: Partial<PendingMutation>): Promise<void> {
+  const existing = await getById<PendingMutation>('pendingMutations', id);
+  if (existing) {
+    await putItem('pendingMutations', { ...existing, ...updates });
+  }
+}
+
+/** Returns all mutations that have a failedAt timestamp (permanent failures). */
+export async function getFailedMutations(): Promise<PendingMutation[]> {
+  const all = await getAll<PendingMutation>('pendingMutations');
+  return all.filter(m => m.failedAt !== undefined);
 }
 
 /**

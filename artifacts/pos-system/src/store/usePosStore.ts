@@ -228,9 +228,10 @@ export function usePosStore() {
         paymentMethod,
       });
 
-      // Refresh products (stock levels may have changed) and orders
-      await Promise.all([loadProducts(), loadOrders()]);
+      // Clear cart immediately so the UI responds instantly.
+      // Refresh stock/orders in the background — don't block the receipt.
       clearCart(tableId);
+      Promise.all([loadProducts(), loadOrders()]).catch(() => {});
       return order;
     } catch (err) {
       // If the order placement failed (e.g. real network/API error), surface it.
