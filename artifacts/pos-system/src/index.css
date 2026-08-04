@@ -78,3 +78,38 @@
     display: none;
   }
 }
+
+/* ── Thermal receipt print styles ─────────────────────────────────────────── */
+@media print {
+  /* Hide the entire app UI when printing */
+  body > *:not(#thermal-print-root) {
+    display: none !important;
+  }
+
+  #thermal-print-root {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    background: white;
+  }
+
+  #thermal-print-root #receipt-preview {
+    width: 80mm;
+    padding: 4mm 3mm;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: 10pt;
+    color: black;
+    background: white;
+  }
+
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+}

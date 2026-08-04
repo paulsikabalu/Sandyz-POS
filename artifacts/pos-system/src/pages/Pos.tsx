@@ -3,8 +3,16 @@ import { usePosStore, DEMO_TABLES } from '../store/usePosStore';
 import { Topbar } from '../components/Topbar';
 import { CenterPanel } from '../components/CenterPanel';
 import { OrderPanel } from '../components/OrderPanel';
+import { ThermalReceipt } from '../components/ThermalReceipt';
 import { useToast } from '@/hooks/use-toast';
 import { Wifi, WifiOff, RefreshCw, CloudOff } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import type { ApiOrder } from '../api/client';
 
 export default function Pos() {
   const {
@@ -28,6 +36,7 @@ export default function Pos() {
   } = usePosStore();
 
   const [isPlacing, setIsPlacing] = useState(false);
+  const [receiptOrder, setReceiptOrder] = useState<ApiOrder | null>(null);
   const { toast } = useToast();
   const [showSyncToast, setShowSyncToast] = useState(false);
 
@@ -53,6 +62,7 @@ export default function Pos() {
       const order = await completeOrder(activeTableId, paymentMethod);
       if (order) {
         const isOfflineOrder = order.id.startsWith('offline_');
+        setReceiptOrder(order);
         toast({
           title: isOfflineOrder ? '📦 Order Queued!' : '✅ Order Placed!',
           description: isOfflineOrder
@@ -138,6 +148,23 @@ export default function Pos() {
           <span>Sync failed — will retry automatically</span>
         </div>
       )}
+
+      {/* Receipt dialog — opens automatically after order is placed */}
+      <Dialog open={!!receiptOrder} onOpenChange={open => { if (!open) setReceiptOrder(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">Receipt</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center overflow-y-auto max-h-[80vh] py-2">
+            {receiptOrder && (
+              <ThermalReceipt
+                order={receiptOrder}
+                onClose={() => setReceiptOrder(null)}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

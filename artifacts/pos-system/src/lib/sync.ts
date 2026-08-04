@@ -9,13 +9,12 @@
 
 import { productsApi, ordersApi } from '../api/client';
 import {
-  getCachedProducts,
-  cacheProducts,
   getCachedOrders,
-  cacheOrders,
   getPendingMutations,
   removeCachedOrder,
   addCachedOrder,
+  updateCachedOrder,
+  rewriteOrderMutationId,
   removeMutation,
   setLastSyncedAt,
   isCacheStale,
@@ -164,9 +163,40 @@ class SyncService {
         );
         if (offlinePlaceholder) {
           await removeCachedOrder(offlinePlaceholder.id);
+          // Rewrite any queued UPDATE_ORDER / DELETE_ORDER mutations that still
+          // reference the old offline placeholder id so they target the real
+          // server-assigned id when executed later in this sync pass.
+          await rewriteOrderMutationId(offlinePlaceholder.id, placed.id);
         }
         // Keep the server-returned order in the cache.
         await addCachedOrder(placed);
+        break;
+      }
+
+      case 'UPDATE_ORDER': {
+        const payload = mutation.payload as {
+          id: string;
+          data: { paymentMethod?: string; tableId?: string; serviceType?: string };
+        };
+        const updated = await ordersApi.update(payload.id, payload.data);
+        await updateCachedOrder(payload.id, updated);
+        break;
+      }
+
+      case 'DELETE_ORDER': {
+        const payload = mutation.payload as { id: string };
+        // If the order was already deleted locally (offline), delete it on the
+        // server too. Ignore 404 — it may have been deleted elsewhere.
+        try {
+          await ordersApi.delete(payload.id);
+        } catch (err: any) {
+          if (!err?.message?.includes('404') && !err?.message?.includes('not found')) {
+            throw err;
+          }
+          console.warn(`[SyncService] DELETE_ORDER: order ${payload.id} already gone`);
+        }
+        // Ensure it's removed from cache (may have already been removed locally)
+        await removeCachedOrder(payload.id);
         break;
       }
 
@@ -187,18 +217,16 @@ class SyncService {
 
     console.log('[SyncService] Refreshing cached data…');
 
-    // Fetch products and orders in parallel
+    // Fetch products and orders in parallel.
+    // Each API method already writes to the local cache internally
+    // (productsApi.list → cacheProducts, ordersApi.list → mergeServerOrders),
+    // so no additional cache writes are needed here.
     const [products, orders] = await Promise.all([
       productsApi.list(),
       ordersApi.list(),
     ]);
 
-    await Promise.all([
-      cacheProducts(products),
-      cacheOrders(orders),
-    ]);
-
-    console.log(`[SyncService] Cached ${products.length} products and ${orders.length} orders`);
+    console.log(`[SyncService] Refreshed ${products.length} products and ${orders.length} orders`);
   }
 
   // ─── Retry scheduling ──────────────────────────────────────────────────

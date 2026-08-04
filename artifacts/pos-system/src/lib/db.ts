@@ -10,7 +10,7 @@ const DB_VERSION = 2;
 
 export type PendingMutation = {
   id: string;
-  type: 'CREATE_PRODUCT' | 'UPDATE_PRODUCT' | 'DELETE_PRODUCT' | 'ADD_STOCK' | 'PLACE_ORDER';
+  type: 'CREATE_PRODUCT' | 'UPDATE_PRODUCT' | 'DELETE_PRODUCT' | 'ADD_STOCK' | 'PLACE_ORDER' | 'UPDATE_ORDER' | 'DELETE_ORDER';
   payload: unknown;
   createdAt: number;
   retries?: number;
@@ -185,8 +185,50 @@ export async function addCachedOrder(order: ApiOrder): Promise<void> {
   await putItem('orders', order);
 }
 
+export async function updateCachedOrder(id: string, updates: Partial<ApiOrder>): Promise<void> {
+  const existing = await getById<ApiOrder>('orders', id);
+  if (existing) {
+    await putItem('orders', { ...existing, ...updates });
+  }
+}
+
 export async function removeCachedOrder(id: string): Promise<void> {
   await deleteItem('orders', id);
+}
+
+/**
+ * Merge server orders into the cache without wiping offline (offline_*) orders.
+ * Use this instead of cacheOrders() when online data arrives so that pending
+ * offline orders are preserved until they are synced.
+ */
+export async function mergeServerOrders(serverOrders: ApiOrder[]): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('orders', 'readwrite');
+    const store = tx.objectStore('orders');
+
+    // Collect all existing offline orders first
+    const getAllReq = store.getAll();
+    getAllReq.onsuccess = () => {
+      const existing = (getAllReq.result as ApiOrder[]).filter((o) =>
+        o.id.startsWith('offline_')
+      );
+
+      // Clear the store and re-insert: server orders + preserved offline orders
+      const clearReq = store.clear();
+      clearReq.onsuccess = () => {
+        const toWrite = [...serverOrders, ...existing];
+        for (const order of toWrite) {
+          store.put(order);
+        }
+      };
+      clearReq.onerror = () => reject(clearReq.error);
+    };
+    getAllReq.onerror = () => reject(getAllReq.error);
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 // ─── Pending Mutations Queue ─────────────────────────────────────────────────
@@ -206,6 +248,46 @@ export async function queueMutation(mutation: Omit<PendingMutation, 'id' | 'crea
 
 export async function removeMutation(id: string): Promise<void> {
   await deleteItem('pendingMutations', id);
+}
+
+/**
+ * After a PLACE_ORDER mutation is synced and we learn the real server-assigned
+ * order ID, scan the remaining pending mutations and rewrite any UPDATE_ORDER /
+ * DELETE_ORDER entries that still reference the old offline placeholder ID.
+ *
+ * This prevents those mutations from targeting a non-existent order when they
+ * are executed later in the same sync pass.
+ */
+export async function rewriteOrderMutationId(
+  offlineId: string,
+  serverId: string
+): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('pendingMutations', 'readwrite');
+    const store = tx.objectStore('pendingMutations');
+
+    const getAllReq = store.getAll();
+    getAllReq.onsuccess = () => {
+      const mutations = getAllReq.result as PendingMutation[];
+      for (const mut of mutations) {
+        if (
+          (mut.type === 'UPDATE_ORDER' || mut.type === 'DELETE_ORDER') &&
+          (mut.payload as { id?: string }).id === offlineId
+        ) {
+          const rewritten: PendingMutation = {
+            ...mut,
+            payload: { ...(mut.payload as Record<string, unknown>), id: serverId },
+          };
+          store.put(rewritten);
+        }
+      }
+    };
+    getAllReq.onerror = () => reject(getAllReq.error);
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function clearMutations(): Promise<void> {

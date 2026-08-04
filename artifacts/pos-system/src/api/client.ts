@@ -2,9 +2,10 @@ import {
   getCachedProducts,
   cacheProducts,
   getCachedOrders,
-  cacheOrders,
   addCachedOrder,
+  updateCachedOrder,
   removeCachedOrder,
+  mergeServerOrders,
   queueMutation,
   updateCachedProduct as updateLocalProduct,
   getCachedCategories,
@@ -185,15 +186,17 @@ export const productsApi = {
 
 export const ordersApi = {
   /**
-   * Fetches orders from the server and updates local cache.
-   * Falls back to cached data if offline.
+   * Fetches orders from the server and merges into local cache.
+   * Preserves any pending offline orders (offline_* ids) so they are not
+   * wiped when the server response arrives.
+   * Falls back to cached data if offline or on error.
    */
   list: async (): Promise<ApiOrder[]> => {
     try {
       const data = await request<ApiOrder[]>('/orders');
-      // Update cache in background
-      cacheOrders(data).catch((err) =>
-        console.warn('[Cache] Failed to cache orders:', err)
+      // Merge server orders into cache, keeping pending offline orders intact
+      mergeServerOrders(data).catch((err) =>
+        console.warn('[Cache] Failed to merge orders:', err)
       );
       return data;
     } catch (error) {
@@ -205,6 +208,63 @@ export const ordersApi = {
       }
       throw error;
     }
+  },
+
+  /** Fetch a single order by id. Falls back to cache if offline. */
+  get: async (id: string): Promise<ApiOrder> => {
+    try {
+      return await request<ApiOrder>(`/orders/${id}`);
+    } catch (error) {
+      // Offline fallback: look up in local cache
+      const cached = await getCachedOrders();
+      const found = cached.find((o) => o.id === id);
+      if (found) {
+        console.log('[API] Serving order from cache:', id);
+        return found;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Update mutable order fields (paymentMethod, tableId, serviceType).
+   * Offline: optimistically update the local cache and queue a mutation.
+   */
+  update: async (
+    id: string,
+    data: { paymentMethod?: string; tableId?: string; serviceType?: string }
+  ): Promise<ApiOrder> => {
+    if (!navigator.onLine) {
+      // Optimistically update the local record
+      await updateCachedOrder(id, data as Partial<ApiOrder>);
+      await queueMutation({ type: 'UPDATE_ORDER', payload: { id, data } });
+      const cached = await getCachedOrders();
+      const order = cached.find((o) => o.id === id);
+      if (!order) throw new Error('Order not found in cache');
+      return order;
+    }
+    const result = await request<ApiOrder>(`/orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    await updateCachedOrder(id, result);
+    return result;
+  },
+
+  /**
+   * Cancel (delete) an order. Restores stock on the server.
+   * Offline: removes from local cache and queues a DELETE_ORDER mutation.
+   * Local stock is NOT restored offline — the sync will handle it online
+   * to avoid stale stock counts from out-of-order mutations.
+   */
+  delete: async (id: string): Promise<void> => {
+    if (!navigator.onLine) {
+      await removeCachedOrder(id);
+      await queueMutation({ type: 'DELETE_ORDER', payload: { id } });
+      return;
+    }
+    await request<void>(`/orders/${id}`, { method: 'DELETE' });
+    await removeCachedOrder(id);
   },
 
   place: async (data: {
@@ -238,6 +298,16 @@ export const ordersApi = {
       };
       // Save to the offline database
       await addCachedOrder(localOrder);
+      // Decrement stock locally so subsequent cart additions respect available stock
+      for (const item of data.items) {
+        const cached = await getCachedProducts();
+        const product = cached.find((p) => p.id === item.productId);
+        if (product) {
+          await updateLocalProduct(item.productId, {
+            stock: Math.max(0, product.stock - item.qty),
+          });
+        }
+      }
       // Queue for sync to the online database when connection returns
       await queueMutation({
         type: 'PLACE_ORDER',

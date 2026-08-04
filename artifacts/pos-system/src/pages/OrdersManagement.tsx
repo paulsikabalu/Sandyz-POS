@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Topbar } from '../components/Topbar';
-import { reportsApi, type PaginatedOrders } from '../api/client';
+import { reportsApi, type PaginatedOrders, type ApiOrder } from '../api/client';
+import { ThermalReceipt } from '../components/ThermalReceipt';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   RefreshCw,
   Search,
@@ -11,6 +18,7 @@ import {
   Banknote,
   CreditCard,
   QrCode,
+  Printer,
 } from 'lucide-react';
 
 const PAYMENT_ICONS: Record<string, React.ReactNode> = {
@@ -25,6 +33,7 @@ export default function OrdersManagement() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [receiptOrder, setReceiptOrder] = useState<ApiOrder | null>(null);
   const { toast } = useToast();
 
   const load = useCallback(async (p: number) => {
@@ -183,6 +192,17 @@ export default function OrdersManagement() {
                           </tr>
                         </tfoot>
                       </table>
+
+                      {/* Print button */}
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          onClick={() => setReceiptOrder(order)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                        >
+                          <Printer size={13} />
+                          Print Receipt
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -216,7 +236,23 @@ export default function OrdersManagement() {
           </div>
         )}
       </div>
+
+      {/* Receipt dialog */}
+      <Dialog open={!!receiptOrder} onOpenChange={open => { if (!open) setReceiptOrder(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">Receipt Preview</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center overflow-y-auto max-h-[80vh] py-2">
+            {receiptOrder && (
+              <ThermalReceipt
+                order={receiptOrder}
+                onClose={() => setReceiptOrder(null)}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

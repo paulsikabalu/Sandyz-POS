@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { orders, orderItems, products } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -178,6 +178,92 @@ router.post("/", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to create order" });
+  }
+});
+
+// GET /api/orders/:id
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rows = await db.select().from(orders).where(eq(orders.id, id));
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    const items = await loadOrderItems(id);
+    res.json(serializeOrder(rows[0], items));
+  } catch (error) {
+    console.error("GET /orders/:id failed:", error);
+    res.status(500).json({ error: "Failed to load order" });
+  }
+});
+
+// PUT /api/orders/:id — update mutable fields (payment method, table, service type)
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentMethod, tableId, serviceType } = req.body as {
+      paymentMethod?: string;
+      tableId?: string;
+      serviceType?: string;
+    };
+
+    const rows = await db.select().from(orders).where(eq(orders.id, id));
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const updates: Partial<{ paymentMethod: string; tableId: string; serviceType: string }> = {};
+    if (paymentMethod !== undefined) updates.paymentMethod = String(paymentMethod);
+    if (tableId !== undefined) updates.tableId = String(tableId);
+    if (serviceType !== undefined) updates.serviceType = String(serviceType);
+
+    const items = await loadOrderItems(id);
+
+    if (Object.keys(updates).length === 0) {
+      return res.json(serializeOrder(rows[0], items));
+    }
+
+    const updated = await db
+      .update(orders)
+      .set(updates)
+      .where(eq(orders.id, id))
+      .returning();
+
+    res.json(serializeOrder(updated[0], items));
+  } catch (error) {
+    console.error("PUT /orders/:id failed:", error);
+    res.status(500).json({ error: "Failed to update order" });
+  }
+});
+
+// DELETE /api/orders/:id — cancel order and restore product stock
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const orderRows = await db.select().from(orders).where(eq(orders.id, id));
+    if (!orderRows[0]) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const items = await loadOrderItems(id);
+
+    await db.transaction(async (tx) => {
+      // Restore stock for each line item
+      for (const item of items) {
+        await tx
+          .update(products)
+          .set({ stock: sql`${products.stock} + ${item.qty}` })
+          .where(eq(products.id, item.productId));
+      }
+      // Delete order — cascades to order_items
+      await tx.delete(orders).where(eq(orders.id, id));
+    });
+
+    res.status(204).end();
+  } catch (error) {
+    console.error("DELETE /orders/:id failed:", error);
+    res.status(500).json({ error: "Failed to delete order" });
   }
 });
 

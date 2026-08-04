@@ -389,10 +389,10 @@ export default function CategoriesManagement() {
     }, {});
 
       return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground">
+    <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-background text-foreground">
       <Topbar />
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden min-h-0">
 
         {/* ------------------------------------------------------------------ */}
         {/* Header                                                             */}
