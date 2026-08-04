@@ -1,0 +1,173 @@
+[
+  {
+    "id": "br1",
+    "name": "White Bread",
+    "category": "Bread",
+    "price": 15,
+    "stock": 50,
+    "unit": "loaves",
+    "image": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "br2",
+    "name": "Brown Bread",
+    "category": "Bread",
+    "price": 18,
+    "stock": 30,
+    "unit": "loaves",
+    "image": "https://images.unsplash.com/photo-1549931319-a545dcf3bc7e?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "br3",
+    "name": "Bread Roll",
+    "category": "Bread",
+    "price": 5,
+    "stock": 100,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "br4",
+    "name": "Garlic Bread",
+    "category": "Bread",
+    "price": 25,
+    "stock": 20,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1619535860434-ba1d8fa12536?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "sh1",
+    "name": "Chicken Shawama",
+    "category": "Shawama",
+    "price": 45,
+    "stock": 40,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1561651823-34feb02250e4?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "sh2",
+    "name": "Beef Shawama",
+    "category": "Shawama",
+    "price": 55,
+    "stock": 35,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "sh3",
+    "name": "Mixed Shawama",
+    "category": "Shawama",
+    "price": 60,
+    "stock": 25,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1590846406792-0adc7f938f1d?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "sh4",
+    "name": "Veggie Shawama",
+    "category": "Shawama",
+    "price": 35,
+    "stock": 20,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "sa1",
+    "name": "Beef Samosa",
+    "category": "Samosa",
+    "price": 10,
+    "stock": 80,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "sa2",
+    "name": "Chicken Samosa",
+    "category": "Samosa",
+    "price": 10,
+    "stock": 80,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1630409351241-e90e7e8a4d4e?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "sa3",
+    "name": "Veggie Samosa",
+    "category": "Samosa",
+    "price": 8,
+    "stock": 60,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "do1",
+    "name": "Pork Dondos",
+    "category": "Dondos",
+    "price": 30,
+    "stock": 50,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "do2",
+    "name": "Beef Dondos",
+    "category": "Dondos",
+    "price": 35,
+    "stock": 45,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "do3",
+    "name": "Chicken Dondos",
+    "category": "Dondos",
+    "price": 25,
+    "stock": 55,
+    "unit": "pieces",
+    "image": "https://images.unsplash.com/photo-1598515213692-f7b2e7e5b29b?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "dr1",
+    "name": "Coca Cola",
+    "category": "Drinks",
+    "price": 15,
+    "stock": 100,
+    "unit": "cans",
+    "image": "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "dr2",
+    "name": "Fanta",
+    "category": "Drinks",
+    "price": 15,
+    "stock": 100,
+    "unit": "cans",
+    "image": "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "dr3",
+    "name": "Water",
+    "category": "Drinks",
+    "price": 8,
+    "stock": 200,
+    "unit": "bottles",
+    "image": "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "dr4",
+    "name": "Fresh Juice",
+    "category": "Drinks",
+    "price": 20,
+    "stock": 50,
+    "unit": "cups",
+    "image": "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=400&h=300&fit=crop&auto=format"
+  },
+  {
+    "id": "dr5",
+    "name": "Energy Drink",
+    "category": "Drinks",
+    "price": 25,
+    "stock": 60,
+    "unit": "cans",
+    "image": "https://images.unsplash.com/photo-1527960471264-932f39eb5846?w=400&h=300&fit=crop&auto=format"
+  }
+]

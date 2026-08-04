@@ -1,0 +1,38 @@
+[
+  {
+    "id": "u_admin",
+    "email": "admin@sandyz.com",
+    "password": "$2b$12$cB/xZAWUiAK77u6UrKZTQ.LKlQVnCEEBQReN.uyKYKQZ4xpHe5nXO",
+    "name": "Admin User",
+    "role": "admin",
+    "createdAt": 1785225073785,
+    "updatedAt": 1785225073785
+  },
+  {
+    "id": "u_cashier1",
+    "email": "cashier@sandyz.com",
+    "password": "$2b$12$XgzPKTZ1LiSAsCW0TZyTJe7HYkUfr7pJ4J4CV5oCYjcBhxmcfsGx.",
+    "name": "Cashier User",
+    "role": "cashier",
+    "createdAt": 1785225073785,
+    "updatedAt": 1785225073785
+  },
+  {
+    "id": "u_manager1",
+    "email": "manager@sandyz.com",
+    "password": "$2b$12$iGYrEb29M.xSzHkozmfnOueFyxxfVxczH2hnnv3xSMpRJAg3cCIca",
+    "name": "Manager User",
+    "role": "manager",
+    "createdAt": 1785225073785,
+    "updatedAt": 1785225073785
+  },
+  {
+    "id": "u_1785226633177",
+    "email": "theodore@sandyz.com",
+    "password": "$2b$12$0YuaV8bOcFrwxyfFjNFI0OyyWEdPMRfiNulb6TlSwXSoRxFX1vM6y",
+    "name": "Theo morgan holide",
+    "role": "admin",
+    "createdAt": 1785226633177,
+    "updatedAt": 1785226633177
+  }
+]

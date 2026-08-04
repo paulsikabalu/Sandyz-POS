@@ -1,0 +1,32 @@
+[
+  {
+    "id": "set_1785225073787",
+    "key": "tax_rate",
+    "value": "5",
+    "updatedAt": 1785225073787
+  },
+  {
+    "id": "set_1785225073854",
+    "key": "currency",
+    "value": "K",
+    "updatedAt": 1785225073854
+  },
+  {
+    "id": "set_1785225073879",
+    "key": "store_name",
+    "value": "Sandyz Restaurant",
+    "updatedAt": 1785225073879
+  },
+  {
+    "id": "set_1785225073898",
+    "key": "default_service_type",
+    "value": "dine-in",
+    "updatedAt": 1785225073898
+  },
+  {
+    "id": "set_1785225073916",
+    "key": "low_stock_threshold",
+    "value": "5",
+    "updatedAt": 1785225073916
+  }
+]

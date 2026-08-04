@@ -1,0 +1,27 @@
+{
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "artifacts/*",
+    "lib/*",
+    "scripts"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=@workspace/api-server\" \"npm run dev --workspace=@workspace/pos-system\"",
+    "build": "npm run typecheck && npm run build --workspaces --if-present",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "concurrently": "^10.0.4",
+    "prettier": "^3.9.5",
+    "typescript": "~5.9.3",
+    "vite": "^8.1.5"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
